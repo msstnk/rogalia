@@ -1,3 +1,5 @@
+/* global game */
+
 "use strict";
 function DragManager() {
     var dragIgnoreTags = ["INPUT", "TEXTAREA", "BUTTON", "CODE"];
@@ -30,14 +32,16 @@ function DragManager() {
     });
 
     window.addEventListener("mousemove", function(event) {
-        const target = drag.target
+        const target = drag.target;
         if (!target)
             return;
 
         const {x, y} = snap(target, event.pageX - drag.x, event.pageY - drag.y);
         target.dataset.x = x;
         target.dataset.y = y;
-        target.style.transform = `translate(${x}px, ${y}px)`;
+        target.style.left = x + "px";
+        target.style.top = y + "px";
+        // target.style.transform = `translate(${x}px, ${y}px)`;
     });
 
     function dragIgnore(element) {
@@ -48,15 +52,15 @@ function DragManager() {
     }
 
     function snap(element, x, y, threshold = 10, margin = 2) {
-        const pos = {x, y}
+        const pos = {x, y};
         const closest = {
             dx: +Infinity,
             dy: +Infinity,
-        }
+        };
         const width = element.clientWidth;
         const height = element.clientHeight;
         Object.values(game.panels)
-            .filter(panel => panel.visible && panel.element != element)
+            .filter(panel => panel.visible && panel.element != element && panel.canSnap)
             .concat([
                 {
                     x: game.offset.x,

@@ -5,9 +5,10 @@
 function System() {
     this.fps = new FpsStats();
 
+    this.fps.domElement.id = "fps-stats-graph";
     const fps = dom.wrap("#fps-stats", this.fps.domElement);
 
-    this.ping = dom.span("Ping: -");
+    this.ping = dom.div("#ping");
 
     this.users = new Users();
     this.settings = new Settings();
@@ -17,8 +18,24 @@ function System() {
     const settings = dom.button(T("Settings"), "", () => this.settings.panel.toggle());
     const profile = dom.button(T("Profile"), "", () => this.profile.panel.toggle());
 
+    const pingQuality = [
+        [100, "#03ce03", "perfect"],
+        [200, "#0f980f", "good"],
+        [300, "#dcb809", "satisfactorily"],
+        [+Infinity, "#d40a0a", "bad"],
+    ];
+
     this.update = function(ping) {
-        this.ping.textContent = "Ping: " + ping + "ms";
+        if (game.player.IsAdmin) {
+            this.ping.textContent = ping;
+        }
+        for (const [limit, color, title] of pingQuality) {
+            if (ping < limit) {
+                this.ping.style.backgroundColor = color;
+                this.ping.title = T(title);
+                break;
+            }
+        }
     };
 
     this.panel = new Panel(
@@ -26,7 +43,10 @@ function System() {
         "System",
         [
             fps,
-            this.ping,
+            dom.wrap("#ping-stats", [
+                "Ping: ",
+                this.ping
+            ]),
             dom.hr(),
             settings,
             users,

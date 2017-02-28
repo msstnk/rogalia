@@ -1,4 +1,4 @@
-/* global util, RectPotentialField, CELL_SIZE, game, CirclePotentialField, Point, Info, dom, T, Panel, Talks, BBox, loader, config, Avatar, Effect, TS, TT, Customization, ImageFilter, FONT_SIZE, astar */
+/* global util, RectPotentialField, CELL_SIZE, game, CirclePotentialField, Point, Info, dom, T, Panel, Talks, BBox, loader, config, Avatar, Effect, TS, TT, Customization, ImageFilter, FONT_SIZE, astar, ContainerSlot */
 
 "use strict";
 function Character(id) {
@@ -136,6 +136,12 @@ Character.prototype = {
     leftTopX: Entity.prototype.leftTopX,
     leftTopY: Entity.prototype.leftTopY,
     compare: Entity.prototype.compare,
+    get statusPoints() {
+        return {
+            Current: this.Citizenship.StatusPoints,
+            Max: Math.pow(10, this.Citizenship.Rank),
+        };
+    },
     setPoint: function(p) {
         this.setPos(p.x, p.y);
     },
@@ -160,10 +166,6 @@ Character.prototype = {
         if (data.X && data.Y) {
             this.syncPosition(data.X, data.Y);
         }
-
-        this.burden = (this.Burden) ? Entity.get(this.Burden) : null;
-        this.plow = ("Plowing" in this.Effects) ? Entity.get(this.Effects.Plowing.Plow) : null;
-
 
         if (data.Messages)
             this._messages = this._messages.concat(data.Messages);
@@ -199,6 +201,11 @@ Character.prototype = {
 
         if (this.isPlayer) {
             game.controller.updateMail(this.NewMail);
+
+            if (data.Exp) {
+                game.controller.xpBar.update(game.player.Exp);
+            }
+
             if (data.Fullness) {
                 game.controller.updateItemInfo();
             }
@@ -524,8 +531,7 @@ Character.prototype = {
         if (this.Action.Duration) {
             const progress = Math.min(this.action.progress, 1);
             if (this.isPlayer) {
-                var ap = game.controller.actionProgress.firstChild;
-                ap.style.width = progress * 100 + "%";
+                game.controller.actionProgress.value = progress * 100;
             }
             var w = 64;
             var h = FONT_SIZE * 0.5;
@@ -1130,6 +1136,10 @@ Character.prototype = {
     update: function(k) {
         this.processMessages();
         this.animate();
+
+        this.burden = (this.Burden) ? Entity.get(this.Burden) : null;
+        this.plow = ("Plowing" in this.Effects) ? Entity.get(this.Effects.Plowing.Plow) : null;
+
         if ("Plague" in this.Effects) {
             this.playAnimation({
                 up: {
@@ -1148,7 +1158,7 @@ Character.prototype = {
                 this.action.last = this.Action.Started;
                 this.toggleActionSound();
                 if (this.isPlayer) {
-                    dom.show(game.controller.actionProgress);
+                    game.controller.actionProgress.show();
                     game.controller.actionButton.startProgress();
                 }
             }
@@ -1156,7 +1166,7 @@ Character.prototype = {
                 this.action.progress += (1 / this.Action.Duration * 1000 * k);
             } else {
                 if (this.isPlayer) {
-                    dom.hide(game.controller.actionProgress);
+                    game.controller.actionProgress.hide();
                     game.controller.actionButton.stopProgress();
                 }
                 this.action.progress = 0;
@@ -1902,25 +1912,47 @@ Character.prototype = {
         game.network.send("inspect", {Id: target.Id}, function(data) {
             if (!data.Equip)
                 return;
+            // TODO: merge with stats.js
+            const slots = data.Equip.reduce(function(slots, item, i) {
+                var name = Character.equipSlots[i];
+                var slot = new ContainerSlot({panel: panel, entity: {}, inspect: true}, i);
+                if (item) {
+                    var entity = new Entity(item.Type);
+                    entity.sync(item);
+                    slot.set(entity);
+                }
+                slot.setPlaceholder(`assets/icons/equip/${name}.png`, TS(name));
+                slots[name] = slot.element;
+                return slots;
+            }, {});
+
             target.Equip = data.Equip;
             var panel = new Panel(
                 "inspect",
                 target.Name,
-                [
-                    new Doll(target),
-                    dom.wrap("equip", data.Equip.map(function(item, i) {
-                        var title = Character.equipSlots[i];
-                        var slot = new ContainerSlot({panel: panel, entity: {}, inspect: true}, i);
-                        if (item) {
-                            var entity = new Entity(item.Type);
-                            entity.sync(item);
-                            slot.set(entity);
-                        }
-                        var elem = slot.element;
-                        elem.classList.add("equip-" + title);
-                        return elem;
-                    })),
-                ]
+                dom.wrap("equip-and-lvl", dom.wrap("equip", [
+                    dom.wrap("level", [
+                        dom.make("small", T("Level")),
+                        dom.wrap("circle", target.Lvl),
+                    ]),
+                    slots["head"],
+                    dom.wrap("faction", [
+                        dom.make("small", T("Rank")),
+                        dom.wrap("square", target.Citizenship.Rank || "?"),
+                    ]),
+                    slots["bag"],
+                    slots["body"],
+                    slots["neck"],
+                    slots["left-hand"],
+                    slots["legs"],
+                    slots["right-hand"],
+                    dom.div(),
+                    slots["feet"],
+                    dom.div(),
+                ].map(elem => {
+                    elem.classList.add("equip-cell");
+                    return elem;
+                })))
             );
             panel.element.classList.add("stats-panel");
             panel.temporary = true;

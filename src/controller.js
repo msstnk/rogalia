@@ -1,4 +1,4 @@
-/* global Point, dom, config, util, T, TS, Container, Avatar, Effects, loader, ParamBar, Panel, CELL_SIZE, Character */
+/* global Point, dom, config, util, T, TS, Container, Avatar, Effects, loader, ParamBar, Panel, CELL_SIZE, Character, gameStorage, playerStorage, ProgressBar */
 
 "use strict";
 
@@ -81,7 +81,9 @@ function Controller(game) {
         },
     };
 
-    this.actionProgress = document.getElementById("action-progress");
+    this.actionProgress = new ProgressBar(game.interface);
+    this.actionProgress.element.id = "action-progress-bar";
+
     this.targetContainer = document.getElementById("target-container");
     this.party = document.getElementById("party");
 
@@ -219,6 +221,7 @@ function Controller(game) {
         icon: null,
         inProgress: false,
         element: document.getElementById("main-action-button"),
+        help: dom.wrap("action-help", T("Space")),
         active: function() {
             return this.handler && this.icon;
         },
@@ -256,9 +259,11 @@ function Controller(game) {
             this.inProgress = false;
         },
         loadIcon: function(action) {
-            dom.clear(this.element);
             this.icon = loader.loadImage("icons/tools/" + action + ".png");
-            this.element.appendChild(this.icon);
+            dom.setContents(this.element, [
+                this.icon,
+                this.help,
+            ]);
         },
     };
 
@@ -468,6 +473,21 @@ function Controller(game) {
                 game.player.liftStart();
             },
             help: "Lift up nearest item",
+        },
+        T: {
+            callback() {
+                if (game.player.mount) {
+                    game.network.send("dismount");
+                } else {
+                    const mounts = game.findCharsNear(game.player.X, game.player.Y)
+                          .filter(c => c.Riding)
+                          .sort((a, b) => a.distanceTo(self) - b.distanceTo(self));
+                    if (mounts.length > 0) {
+                        game.network.send("mount", {Id: mounts[0].Id});
+                    }
+                }
+            },
+            "help": "Mount/unmount"
         },
         9: { //tab
             callback() {
@@ -1141,6 +1161,15 @@ function Controller(game) {
         game.menu.show(actions);
     };
 
+    this.showMessage = function(message, duration = 2500) {
+        const record = dom.div("info-message", {text: message});
+        document.getElementById("messages").appendChild(record);
+        setTimeout(function() {
+            dom.remove(record);
+        }, duration);
+
+    };
+
     this.showError = function(message) {
         showMessage(message, "error");
     };
@@ -1366,7 +1395,9 @@ function Controller(game) {
         }
     };
 
+    this.ping = 0;
     this.updatePing = function(ping) {
+        this.ping = ping;
         this.system && this.system.update(ping);
     };
 

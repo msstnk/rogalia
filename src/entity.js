@@ -1,4 +1,4 @@
-/* global dom, T, util, game, Panel, config, Point, Container, Stats, Character, BBox, TS */
+/* global dom, T, util, game, Panel, config, Point, Container, Character, BBox, TS, Permission, ParamBar, SlotMachine */
 
 "use strict";
 function Entity(type, id) {
@@ -155,12 +155,12 @@ Entity.prototype = {
     },
     showInfo: function() {
         var elements = [];
-        elements.push(Stats.prototype.createValue("Level", this.Lvl));
-        elements.push(Stats.prototype.createValue("Quality", this.Quality));
-        elements.push(Stats.prototype.createParam("Durability", this.Durability));
+        elements.push(ParamBar.makeValue("Level", this.Lvl));
+        elements.push(ParamBar.makeValue("Quality", this.Quality));
+        elements.push(ParamBar.makeParam("Durability", this.Durability));
 
         if ("Readiness" in this) {
-            elements.push(Stats.prototype.createParam("Readiness", this.Readiness));
+            elements.push(ParamBar.makeParam("Readiness", this.Readiness));
         }
 
         if (this.Group == "food") {
@@ -174,11 +174,11 @@ Entity.prototype = {
             var k = Math.sqrt(this.Quality);
             Character.vitamins.forEach(function(vitamin) {
                 var value = this.Props[vitamin] * k;
-                var elem = Stats.prototype.createValue(vitamin, value, 2);
+                var elem = ParamBar.makeValue(vitamin, value, 2);
                 elem.classList.add("vitamin-" + vitamin.toLowerCase());
                 elements.push(elem);
             }.bind(this));
-            elements.push(Stats.prototype.createValue("Energy", this.Props.Energy, 2));
+            elements.push(ParamBar.makeValue("Energy", this.Props.Energy, 2));
 
         } else if (this.Group == "portal") {
             var input = dom.input("", this.Id);
@@ -193,13 +193,13 @@ Entity.prototype = {
             }
         } else if ("Block" in this) {
             var block = this.Block;
-            elements.push(Stats.prototype.createValue("Block", block));
+            elements.push(ParamBar.makeValue("Block", block));
         } else if (this.Props.Capacity) {
-            elements.push(Stats.prototype.createParam("Capacity", this.Props.Capacity));
+            elements.push(ParamBar.makeParam("Capacity", this.Props.Capacity));
         }
 
         if (this.EffectiveParam && this.Lvl > 1) {
-            var requirement = Stats.prototype.createValue(this.EffectiveParam, this.template().Lvl);
+            var requirement = ParamBar.makeValue(this.EffectiveParam, this.template().Lvl);
             if (this.nonEffective()) {
                 requirement.classList.add("unavailable");
             }
@@ -214,6 +214,11 @@ Entity.prototype = {
             elements.push(dom.hr());
         }
         elements.push(this.makeDescription());
+
+        if (this.isContainer() || this.Group == "gate") {
+            elements.push(dom.hr());
+            elements.push(Permission.make(this.Id, this.Perm));
+        }
 
         new Panel("item-info", TS(this.Name), elements).setEntity(this).show();
     },
@@ -430,7 +435,7 @@ Entity.prototype = {
             actions[1]["Disassemble"] = this.disassemble;
         }
 
-        if (this.isTool() && this.Location != Entity.LOCATION_EQUIPPED) {
+        if (this.canBeEquipped()) {
             actions[0]["To equip"] = this.equip;
         }
 
@@ -482,7 +487,15 @@ Entity.prototype = {
             "insect-net",
             "tool",
             "fishing-rod",
+            "prospector",
         ], this.Group);
+    },
+    canBeEquipped: function() {
+        if (this.Location == Entity.LOCATION_EQUIPPED)
+            return false;
+        if (this.Group == "prospector")
+            return false;
+        return this.isTool();
     },
     alignedData: function(p) {
         var align = this.Sprite && this.Sprite.Align;
@@ -645,7 +658,7 @@ Entity.prototype = {
     },
     split: function() {
         var args = {Id: this.Id};
-        if (this.Group == "currency") {
+        if ("Amount" in this) {
             game.popup.prompt(T("How many?"), 1, function(amount) {
                 args.Amount = +amount;
                 game.network.send("split", args);
@@ -673,6 +686,9 @@ Entity.prototype = {
         switch(this.Group) {
         case "jukebox":
             this.defaultActionSuccess = () => { game.jukebox.open(this); };
+            break;
+        case "slot-machine":
+            this.defaultActionSuccess = () => { new SlotMachine(this); };
             break;
         case "label":
         case "portal":
